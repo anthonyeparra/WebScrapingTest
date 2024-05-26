@@ -1,0 +1,83 @@
+service: web-scraping-test
+frameworkVersion: '3'
+
+
+package:
+  patterns:
+    - "!node_modules/**"
+    - "!.vscode/**"
+    - "!package-lock.json"
+    - "!package.json"
+    - "!env/**"
+    - "!layer_bookstore.zip"
+  include:
+    - bin/**
+
+custom:
+  pythonRequirements:
+    fileName: requirements.txt
+    useDownloadCache: false
+    useStaticCache: false # Set to "false" to force update
+    invalidateCaches: true
+    layer:
+      name: userLayer-${self:provider.stage}
+      description: Python requirements lambda layer
+      compatibleRuntimes:
+        - python3.10
+    slim: true # otherwise slimPatterns will not work
+    strip: false # avoid some ELF alignment issues
+    slimPatternsAppendDefaults: false
+    slimPatterns:
+      - numpy/**
+      - numpy.libs/**
+      - boto3/**
+      - botocore/**
+      - s3transfer/**
+      - urllib3/**
+      - mysql/vendor/**
+      - "**/*.py[c|o]"
+      - "**/__pycache__*"
+    pipCmdExtraArgs:
+      - --no-deps
+
+layers:
+  PythonBookstore:
+    package:
+      artifact: layer_bookstore.zip
+    name: web-scraping-test-PythonBookstore-${self:provider.stage}
+    description: "Dependencies for the lambdas"
+    compatibleRuntimes:
+      - python3.10
+
+provider:
+  name: aws
+  runtime: python3.10
+  stage: ${opt:stage, "dev"}
+  environment:
+    STAGE: ${self:provider.stage}
+    DB_HOST: ${env:DB_HOST}
+    DB_NAME: ${env:DB_NAME}
+    DB_USER: ${env:DB_USER}
+    DB_PASSWORD: ${env:DB_PASSWORD}
+    URL_DIAN: ${env:URL_DIAN}
+    SCRIPT_PATH: ${env:SCRIPT_PATH}
+    RECAPTCHA_SITE_KEY: ${env:RECAPTCHA_SITE_KEY}
+  layers:
+    - { Ref: PythonRequirementsLambdaLayer }
+    - { Ref: PythonBookstoreLambdaLayer }
+
+useDotenv: true
+
+functions:
+  WebScrapingHandler:
+    handler: Handler/WebScrapingHandler.get_information_cufe
+    timeout: 29
+    events:
+      - http:
+          path: /v1/api/consult_invoice_information
+          method: POST
+
+          
+plugins:
+  - serverless-offline
+  - serverless-python-requirements
